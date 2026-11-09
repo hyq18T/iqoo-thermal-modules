@@ -1,0 +1,186 @@
+#!/system/bin/sh
+# iq9_chg_temp_spoof helper: boot|enable|disable|toggle|status [moddir]
+CMD=$1
+MODDIR=${2:-$(dirname "$(dirname "$0")")}
+KO=$MODDIR/bq_pwr_aux.ko
+CONF=$MODDIR/spoof.conf
+PARAM=/sys/module/bq_pwr_aux/parameters
+CMS_FIXED=/sys/class/cms_class/fixed_temp
+LOG=/data/local/tmp/iq9_spoof.log
+
+log() { echo "$(date '+%m-%d %H:%M:%S') $*" >> "$LOG"; }
+
+conf_get() {
+  grep -E "^$1=" "$CONF" 2>/dev/null | head -1 | cut -d= -f2 |
+    tr -d ' \r\n'
+}
+
+write_default_conf() {
+  cat > "$CONF" <<EOF
+enabled=1
+func_mask=0x17f
+zone_mask=0xf
+zone_tgt_mc=36000
+cms_tgt_x10=360
+n32_prop_mask=2087
+fixed_temp_val=36
+EOF
+}
+
+ko_loaded() { grep -q '^bq_pwr_aux ' /proc/modules 2>/dev/null; }
+
+# The charging MCU driver (vivo_chg_mcu_hvdb) is loaded early in boot, but
+# service.sh may still race it; wait up to 30 s before resolving its address.
+wait_mcu() {
+  i=0
+  while [ $i -lt 30 ]; do
+    grep -q '^vivo_chg_mcu_hvdb ' /proc/modules 2>/dev/null && return 0
+    sleep 1
+    i=$((i+1))
+  done
+  return 1
+}
+
+# Resolve the real kernel address of the ACTIVE MCU driver's
+# stm32_db_mcu_get_property.  Several loaded modules carry that symbol name
+# (vivo_chg_mcu_hvdb / N32 variants / wireless variants); registering by
+# name would hook whichever copy comes first in module list order, which is
+# not necessarily the running one.  kptr_restrict is lowered only for the
+# lookup and restored right after.
+resolve_n32_addr() {
+  old=$(cat /proc/sys/kernel/kptr_restrict 2>/dev/null)
+  echo 0 > /proc/sys/kernel/kptr_restrict 2>/dev/null
+  addr=$(grep -E ' stm32_db_mcu_get_property' /proc/kallsyms 2>/dev/null |
+    grep '\[vivo_chg_mcu_hvdb\]' | awk '{print $1}' | head -1)
+  [ -n "$old" ] && echo "$old" > /proc/sys/kernel/kptr_restrict 2>/dev/null
+  echo "$addr"
+}
+
+load_ko() {
+  [ -f "$KO" ] || { log "ko missing: $KO"; return 1; }
+  wait_mcu || log "vivo_chg_mcu_hvdb not loaded after 30s"
+  addr=$(resolve_n32_addr)
+  if ko_loaded; then
+    rmmod bq_pwr_aux 2>>"$LOG"
+  fi
+  if [ -n "$addr" ]; then
+    insmod "$KO" n32_addr=0x$addr 2>>"$LOG"
+  else
+    insmod "$KO" 2>>"$LOG"
+    log "n32 addr not found, fallback to name lookup"
+  fi
+  rc=$?
+  if [ $rc -ne 0 ] || ! ko_loaded; then
+    log "insmod failed rc=$rc addr=$addr"
+    return 1
+  fi
+  log "ko loaded addr=$addr"
+  return 0
+}
+
+apply_params() {
+  [ -d "$PARAM" ] || { log "params missing"; return 1; }
+  echo "$(conf_get func_mask)" > "$PARAM/func_mask" 2>/dev/null
+  echo "$(conf_get zone_mask)" > "$PARAM/zone_mask" 2>/dev/null
+  echo "$(conf_get zone_tgt_mc)" > "$PARAM/zone_tgt_mc" 2>/dev/null
+  echo "$(conf_get cms_tgt_x10)" > "$PARAM/cms_tgt_x10" 2>/dev/null
+  echo "$(conf_get n32_prop_mask)" > "$PARAM/n32_prop_mask" 2>/dev/null
+}
+
+set_fixed_temp() {
+  # $1 = value written to the vivo FG fixed-temp factory knob
+  if [ -w "$CMS_FIXED" ]; then
+    echo "$1" > "$CMS_FIXED"
+    log "fixed_temp=$1 rc=$?"
+  else
+    log "fixed_temp not writable"
+  fi
+}
+
+save_conf() {
+  # $1=key $2=value
+  if grep -qE "^$1=" "$CONF" 2>/dev/null; then
+    sed -i "s/^$1=.*/$1=$2/" "$CONF" 2>/dev/null ||
+      { grep -vE "^$1=" "$CONF" > "$CONF.tmp"; echo "$1=$2" >> "$CONF.tmp"; mv "$CONF.tmp" "$CONF"; }
+  else
+    echo "$1=$2" >> "$CONF"
+  fi
+}
+
+enable_spoof() {
+  load_ko || return 1
+  apply_params
+  echo 1 > "$PARAM/action" 2>/dev/null
+  set_fixed_temp "$(conf_get fixed_temp_val)"
+  save_conf enabled 1
+  log "spoof enabled"
+  return 0
+}
+
+disable_spoof() {
+  if [ -d "$PARAM" ]; then
+    echo 0 > "$PARAM/action" 2>/dev/null
+  fi
+  set_fixed_temp 0
+  save_conf enabled 0
+  log "spoof disabled"
+  return 0
+}
+
+cur_state() {
+  [ -d "$PARAM" ] || { echo 0; return; }
+  v=$(cat "$PARAM/action" 2>/dev/null)
+  [ -n "$v" ] || v=0
+  echo $((v & 1))
+}
+
+show_status() {
+  echo "state: $(cur_state) (1=on 0=off)"
+  if [ -d "$PARAM" ]; then
+    for p in action func_mask zone_mask zone_tgt_mc cms_tgt_x10 cms_hits zone_hits \
+             real_cms_usb_conn_x10 real_cms_primary_board_x10 \
+             real_zone_battery_mc real_zone_conn_mc; do
+      [ -f "$PARAM/$p" ] && echo "$p=$(cat "$PARAM/$p" 2>/dev/null)"
+    done
+  fi
+  echo "fixed_temp=$(cat "$CMS_FIXED" 2>/dev/null)"
+}
+
+[ -f "$CONF" ] || write_default_conf
+
+case "$CMD" in
+boot)
+  if [ "$(conf_get enabled)" = "1" ]; then
+    enable_spoof
+  else
+    load_ko
+    [ -d "$PARAM" ] && echo 0 > "$PARAM/action" 2>/dev/null
+    set_fixed_temp 0
+  fi
+  ;;
+enable)
+  enable_spoof || { echo fail; exit 1; }
+  echo 1
+  ;;
+disable)
+  disable_spoof
+  echo 0
+  ;;
+toggle)
+  if [ "$(cur_state)" = "1" ]; then
+    disable_spoof
+    echo 0
+  else
+    enable_spoof || { echo fail; exit 1; }
+    echo 1
+  fi
+  ;;
+status)
+  show_status
+  ;;
+*)
+  echo "usage: setup boot|enable|disable|toggle|status [moddir]"
+  exit 2
+  ;;
+esac
+exit 0

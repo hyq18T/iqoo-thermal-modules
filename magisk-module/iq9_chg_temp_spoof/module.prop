@@ -1,0 +1,6 @@
+id=iq9_chg_temp_spoof
+name=iQOO9充电温度伪装
+version=v0.3.0
+versionCode=300
+author=local
+description=将 iQOO 9 充电链路温度伪装为 36.0°C：cms 主板/USB接口/电池NTC + MCU(N32)连接器温度（内核 kretprobe，含 NTC 保护输入）+ 电池FG/热区（fixed_temp）。总开关+分项掩码可调，关闭即恢复真实温度。v0.3.0 增加只读观察钩子（step充电电流/fastchg检查/keep-soc上限），不改充电行为。

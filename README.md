@@ -1,21 +1,30 @@
-# iQOO 温控模块仓库
+# iQOO 9 充电链路温度伪装（iqoo9-chg-temp-spoof）
 
-这个仓库用分支分别存放两台 iQOO 设备的温度伪装 / 解除温控模块：
+适配：iQOO 9（V2171A / PD2171，内核 5.10.233-gki），KernelSU / Magisk
 
-| 分支 | 设备 | 说明 |
-|---|---|---|
-| [iqoo15-thermal](../../tree/iqoo15-thermal) | iQOO 15（V2505A / PD2505） | 15 分类温度伪装 34°C + 只读节点伪装 + 电池循环伪装 + 解除温控降频 |
-| [iqoo9-thermal](../../tree/iqoo9-thermal) | iQOO 9 | AaTempSpoof 内核模块版温度伪装 |
+## 功能
+- 内核 kretprobe 把充电链路读取的温度统一伪装为 36.0°C：
+  - cms 主板 NTC、并联板 NTC、USB 连接器 NTC（两路）、电池 NTC（两路）
+  - STM32 MCU 的 NTC 通道（bat_conn_temp / master_bat_conn_temp / bat_board_temp，经 `stm32l011_temp_from_voltage` 统一改写）
+  - `thermal_zone_get_temp` 覆盖指定热区
+- 电池 FG / 热区 / 系统上报温度通过 vivo `cms_class/fixed_temp` 锁定
+- 总开关 + 分项掩码（func_mask / zone_mask）可调，关闭立即恢复真实温度
+- v0.3.0 增加只读观察钩子（step 充电电流 / fastchg 检查 / keep-soc 上限），不改变充电行为
+
+## 目录
+```
+src/iq9_chg_temp_spoof.c        内核模块源码（kretprobe）
+scripts/build_iq9_chg.sh        交叉编译脚本
+scripts/gen_versions.py         生成 __versions
+scripts/package.py              打包脚本
+out/                            编译产物（.ko / release zip）
+magisk-module/iq9_chg_temp_spoof/  模块本体（setup / service / module.prop）
+```
 
 ## 安装
-1. 切到对应分支，或直接下载该分支 `release/` 下的 zip
-2. 在 KernelSU / Magisk 管理器中安装
-3. 重启（iQOO 15 可免重启立即生效）后打开 WebUI 配置
+管理器安装 `out/iq9_chg_temp_spoof_v0.3.0.zip`，重启生效。总开关与分项掩码在模块配置中调整。
 
-## 说明
-- 两个模块都按对应机型的内核节点适配，跨机型安装会拒绝或部分失效
-- 温度伪装会让系统热控读不到真实温度；解除温控会放开温度墙与频率限制，长期高温运行有硬件风险，请自行评估
-- 仓库只存放模块源码与发布包
-
-## 许可证
-仅限个人学习与自用，禁止商业售卖。
+## 注意
+- 内核模块需要与内核版本匹配，系统升级后需要重新编译
+- 与其它温度伪装 / 去温控模块冲突，不要同时安装
+- 仅限个人自用，使用风险自担
