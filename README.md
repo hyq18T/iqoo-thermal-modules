@@ -1,21 +1,40 @@
-# iQOO 温控模块仓库
+# iQOO 15 温控管家（iqoo15-thermal）
 
-这个仓库用分支分别存放两台 iQOO 设备的温度伪装 / 解除温控模块：
+适配：iQOO 15 / V2505A / PD2505，Android 16（内核 6.12.23），KernelSU（Magisk 亦可，WebUI 需管理器支持）
 
-| 分支 | 设备 | 说明 |
-|---|---|---|
-| [iqoo15-thermal](../../tree/iqoo15-thermal) | iQOO 15（V2505A / PD2505） | 15 分类温度伪装 34°C + 只读节点伪装 + 电池循环伪装 + 解除温控降频 |
-| [iqoo9-thermal](../../tree/iqoo9-thermal) | iQOO 9 | AaTempSpoof 内核模块版温度伪装 |
+## 功能
+- 15 个温度分类独立开关：CPU / GPU / 内存 / 基带 / 相机 / 视频 / 主板壳温 / 屏幕外壳 / 电池 / 充电 IC / USB 无线充 / 射频 / WiFi / PMIC / 其他
+- 统一伪装 34.0°C，热区通过内核 `emul_temp` 生效（内核热控读到的就是 34°C）
+- 电池上报温度通过 vivo `cms_class/fixed_temp` 锁定（`battery/temp`、`dumpsys battery` 均为 34.0）
+- 只读节点伪装：USB 口 / 无线充 / USB 连接器 / 主副板 / 放电曲线 / `bat_therm`，用 bind mount 覆盖
+- 电池循环次数伪装（默认 22 次），同时覆盖 `battery`、`bq_bms`、`fg_sh366101` 的 uevent
+- uevent 同步守护：每 10 秒重生成假 uevent，循环/温度恒定伪装，电量/电压/电流保持实时
+- 解除温控降频：87 处温度墙抬到 110°C、CPU 频率上限恢复硬件最大值、冷却设备清零
+- 安装时检测机型 / Root 方案 / 冲突模块，非 vivo 或内核不支持 `emul_temp` 会拒绝安装
 
 ## 安装
-1. 切到对应分支，或直接下载该分支 `release/` 下的 zip
-2. 在 KernelSU / Magisk 管理器中安装
-3. 重启（iQOO 15 可免重启立即生效）后打开 WebUI 配置
+管理器安装 `release/iqoo15_thermal_v1.7.4.zip`，安装后无需完整重启（脚本立即生效，开机脚本下次启动接管）。
 
-## 说明
-- 两个模块都按对应机型的内核节点适配，跨机型安装会拒绝或部分失效
-- 温度伪装会让系统热控读不到真实温度；解除温控会放开温度墙与频率限制，长期高温运行有硬件风险，请自行评估
-- 仓库只存放模块源码与发布包
+## 使用
+WebUI 四个页签：
+- 状态：总状态、目标温度、已伪装热区、解除温控降频开关、实时读数
+- 配置：只读节点伪装（连接器/主板、电池循环）、15 个分类开关
+- 热区：全部热区与实时温度
+- 设置：目标温度（28–42°C）、重新应用、全部还原
 
-## 许可证
-仅限个人学习与自用，禁止商业售卖。
+## 风险提示
+- 温度伪装会让系统热控失去真实温度参考，长时间高负载可能过热
+- 解除温控会放开温度墙与 CPU 频率限制，请自行评估硬件风险
+- 只读节点用 bind mount 实现，仅影响上层读取，不改内核充电算法
+- 已知限制：87 处温度墙中仅 1 处保留原始值，关闭解除温控后其余仍为 110°C，重启复位
+
+## 目录
+```
+module.prop / customize.sh / service.sh / post-fs-data.sh / action.sh / uninstall.sh
+bin/thermal.sh      核心逻辑
+bin/ueventd.sh      uevent 同步守护
+bin/check_env.sh    安装环境检测
+conf/               分类映射与保持真实名单
+webroot/index.html  WebUI
+release/            发布包
+```
