@@ -1,21 +1,26 @@
-# iQOO 温控模块仓库
+# iQOO 9 温度伪装模块（iqoo9-thermal）
 
-这个仓库用分支分别存放两台 iQOO 设备的温度伪装 / 解除温控模块：
+基于 AaTempSpoof 框架定制的 iQOO 9 温度伪装模块（内核模块 + 用户态配置）。
 
-| 分支 | 设备 | 说明 |
-|---|---|---|
-| [iqoo15-thermal](../../tree/iqoo15-thermal) | iQOO 15（V2505A / PD2505） | 15 分类温度伪装 34°C + 只读节点伪装 + 电池循环伪装 + 解除温控降频 |
-| [iqoo9-thermal](../../tree/iqoo9-thermal) | iQOO 9 | AaTempSpoof 内核模块版温度伪装 |
+## 功能
+- 通过内核模块 hook 温度读取接口，伪装 CPU / GPU / DDR / 电池 / 充电相关温度
+- 电池循环次数伪装
+- WebUI 状态 / 配置 / 设置三个页签
+- 充电温度伪装：bat_board_temp、usb_conn_temp、master_bat_conn_temp、bat_conn_temp 等
+
+## 内容
+- `bin/AaTempSpoof`：主程序
+- `bin/bq_pwr_aux.ko`：充电相关内核模块
+- `bin/lkm_setup`：内核模块加载脚本
+- `bin/config/AaTempSpoof/`：开关与参数
+- `webroot/index.html`：WebUI
+- `release/AAaTempSpoof_iQOO9_v13.5-iqoo9.3.zip`：发布包
+
+## 注意
+- 仅适配 iQOO 9，其他机型不要安装
+- 内核模块需要与内核版本匹配，系统升级后可能失效
+- 仍有两处无法伪装：MCU 固件级保护、`/sys/class/stm32_debug/*` 调试节点（只显示真实值，不影响充电算法）
+- 仅限个人自用
 
 ## 安装
-1. 切到对应分支，或直接下载该分支 `release/` 下的 zip
-2. 在 KernelSU / Magisk 管理器中安装
-3. 重启（iQOO 15 可免重启立即生效）后打开 WebUI 配置
-
-## 说明
-- 两个模块都按对应机型的内核节点适配，跨机型安装会拒绝或部分失效
-- 温度伪装会让系统热控读不到真实温度；解除温控会放开温度墙与频率限制，长期高温运行有硬件风险，请自行评估
-- 仓库只存放模块源码与发布包
-
-## 许可证
-仅限个人学习与自用，禁止商业售卖。
+管理器安装 release 下的 zip，重启生效。

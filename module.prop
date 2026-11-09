@@ -1,0 +1,6 @@
+id=AAaTempSpoof
+name=AaTempSpoof(iQOO9)
+version=v13.5-iqoo9.3
+versionCode=13503
+author=酷安@傻瓜我爱你呀喵 (iQOO9 port)
+description=iQOO9(V2171A)适配：CPU/GPU/DDR/电池/循环/电量温度伪装。基于 AaTempSpoof 开源框架源码自行构建，参数取自本机实测（emul_temp 热区模拟 + 电池节点挂载伪装）。v13.5-iqoo9.3：一键关闭温控新增解除现行限频（停 thermal-engine + 清冷却设备 + CPU 满频恢复），修复游戏卡顿/掉帧；充电实测全程 Fast 无降级。

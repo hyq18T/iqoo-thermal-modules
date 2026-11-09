@@ -1,0 +1,159 @@
+#!/system/bin/sh
+# iQOO9 合并版内核层助手（原 iq9_chg_temp_spoof 模块的 setup）：
+#   boot|enable|disable|status [moddir]
+# boot    : 等待 MCU 驱动 -> 解析活跃副本地址 -> insmod -> 应用掩码参数
+#           （action / fixed_temp 交给守护进程按“内核充电温度伪装”开关决定）
+# enable  : boot + action=1 + fixed_temp=36
+# disable : action=0 + fixed_temp=0（restore 真实温度）
+CMD=$1
+MODDIR=${2:-$(dirname "$(dirname "$0")")}
+KO=$MODDIR/bin/bq_pwr_aux.ko
+CONF=$MODDIR/bin/lkm.conf
+PARAM=/sys/module/bq_pwr_aux/parameters
+CMS_FIXED=/sys/class/cms_class/fixed_temp
+LOG=/data/local/tmp/iq9_merged.log
+
+log() { echo "$(date '+%m-%d %H:%M:%S') lkm: $*" >> "$LOG"; }
+
+conf_get() {
+  grep -E "^$1=" "$CONF" 2>/dev/null | head -1 | cut -d= -f2 |
+    tr -d ' \r\n'
+}
+
+write_default_conf() {
+  cat > "$CONF" <<EOF
+func_mask=0x17f
+zone_mask=0
+zone_tgt_mc=36000
+cms_tgt_x10=360
+n32_prop_mask=2087
+fixed_temp_val=36
+EOF
+}
+
+ko_loaded() { grep -q '^bq_pwr_aux ' /proc/modules 2>/dev/null; }
+
+# The charging MCU driver (vivo_chg_mcu_hvdb) is loaded early in boot, but
+# service.sh may still race it; wait up to 30 s before resolving its address.
+wait_mcu() {
+  i=0
+  while [ $i -lt 30 ]; do
+    grep -q '^vivo_chg_mcu_hvdb ' /proc/modules 2>/dev/null && return 0
+    sleep 1
+    i=$((i+1))
+  done
+  return 1
+}
+
+# Resolve the real kernel address of the ACTIVE MCU driver's
+# stm32_db_mcu_get_property.  Several loaded modules carry that symbol name
+# (vivo_chg_mcu_hvdb / N32 variants / wireless variants); registering by
+# name would hook whichever copy comes first in module list order, which is
+# not necessarily the running one.  kptr_restrict is lowered only for the
+# lookup and restored right after.
+resolve_n32_addr() {
+  old=$(cat /proc/sys/kernel/kptr_restrict 2>/dev/null)
+  echo 0 > /proc/sys/kernel/kptr_restrict 2>/dev/null
+  addr=$(grep -E ' stm32_db_mcu_get_property' /proc/kallsyms 2>/dev/null |
+    grep '\[vivo_chg_mcu_hvdb\]' | awk '{print $1}' | head -1)
+  [ -n "$old" ] && echo "$old" > /proc/sys/kernel/kptr_restrict 2>/dev/null
+  echo "$addr"
+}
+
+load_ko() {
+  [ -f "$KO" ] || { log "ko missing: $KO"; return 1; }
+  wait_mcu || log "vivo_chg_mcu_hvdb not loaded after 30s"
+  addr=$(resolve_n32_addr)
+  if ko_loaded; then
+    rmmod bq_pwr_aux 2>>"$LOG"
+  fi
+  if [ -n "$addr" ]; then
+    insmod "$KO" n32_addr=0x$addr 2>>"$LOG"
+  else
+    insmod "$KO" 2>>"$LOG"
+    log "n32 addr not found, fallback to name lookup"
+  fi
+  rc=$?
+  if [ $rc -ne 0 ] || ! ko_loaded; then
+    log "insmod failed rc=$rc addr=$addr"
+    return 1
+  fi
+  log "ko loaded addr=$addr"
+  return 0
+}
+
+apply_params() {
+  [ -d "$PARAM" ] || { log "params missing"; return 1; }
+  echo "$(conf_get func_mask)" > "$PARAM/func_mask" 2>/dev/null
+  echo "$(conf_get zone_mask)" > "$PARAM/zone_mask" 2>/dev/null
+  echo "$(conf_get zone_tgt_mc)" > "$PARAM/zone_tgt_mc" 2>/dev/null
+  echo "$(conf_get cms_tgt_x10)" > "$PARAM/cms_tgt_x10" 2>/dev/null
+  echo "$(conf_get n32_prop_mask)" > "$PARAM/n32_prop_mask" 2>/dev/null
+}
+
+set_action() {
+  # $1 = 1/0 : keep other action bits (verbose log bit) intact
+  [ -f "$PARAM/action" ] || return 1
+  cur=$(cat "$PARAM/action" 2>/dev/null | tr -d ' \r\n')
+  [ -n "$cur" ] || cur=0
+  if [ "$1" = "1" ]; then
+    new=$((cur | 1))
+  else
+    new=$((cur & ~1))
+  fi
+  echo "$new" > "$PARAM/action" 2>/dev/null
+}
+
+set_fixed_temp() {
+  if [ -w "$CMS_FIXED" ]; then
+    echo "$1" > "$CMS_FIXED"
+    log "fixed_temp=$1 rc=$?"
+  else
+    log "fixed_temp not writable"
+  fi
+}
+
+cur_state() {
+  [ -f "$PARAM/action" ] || { echo 0; return; }
+  v=$(cat "$PARAM/action" 2>/dev/null)
+  [ -n "$v" ] || v=0
+  echo $((v & 1))
+}
+
+show_status() {
+  echo "lkm_loaded: $(ko_loaded && echo 1 || echo 0)"
+  echo "lkm_action: $(cur_state)"
+  [ -d "$PARAM" ] && for p in func_mask zone_mask n32_prop_mask cms_hits n32_hits; do
+    [ -f "$PARAM/$p" ] && echo "$p=$(cat "$PARAM/$p" 2>/dev/null)"
+  done
+  echo "fixed_temp=$(cat "$CMS_FIXED" 2>/dev/null)"
+}
+
+[ -f "$CONF" ] || write_default_conf
+
+case "$CMD" in
+boot)
+  load_ko || exit 1
+  apply_params
+  # 内核层运行状态由守护进程按开关同步（这里先保持关闭，失败安全）
+  set_action 0
+  ;;
+enable)
+  load_ko || { echo fail; exit 1; }
+  apply_params
+  set_action 1
+  set_fixed_temp "$(conf_get fixed_temp_val)"
+  ;;
+disable)
+  set_action 0
+  set_fixed_temp 0
+  ;;
+status)
+  show_status
+  ;;
+*)
+  echo "usage: lkm_setup boot|enable|disable|status [moddir]"
+  exit 2
+  ;;
+esac
+exit 0
