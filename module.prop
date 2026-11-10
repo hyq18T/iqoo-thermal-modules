@@ -1,6 +1,6 @@
 id=iqoo15_thermal
 name=iQOO 15 温控管家
-version=1.7.6
-versionCode=176
+version=1.7.7
+versionCode=177
 author=槐蔕區
 description=15 个温度分类独立开关 + 连接器/主板温度 + 电池循环次数伪装，统一 34°C，另带解除温控降频。温度伪装 34°C（热区 + 电池 power_supply 上报温度）+ 解除温控降频（抬墙 110°C）。不改内核、不停止服务，可随时关闭还原。

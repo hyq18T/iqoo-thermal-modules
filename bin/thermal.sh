@@ -343,6 +343,73 @@ clear_spoof() {
 }
 
 FREQ_BACKUP="$D/cpufreq_backup"
+THML_KEY=/proc/pem/thml_key_type
+THERMAL_SUMMARY=/dev/thermal/thermal_data_summary.conf
+SUMMARY_BACKUP="$D/thermal_summary_backup"
+PEM_PLUGIN=com.ueppp.restriction.job.ThermalRestrictionPlugin
+PEM_UNIFIED=/data/bbkcore/pem/uepp/unified
+
+# vivo PEM 温控策略：thml_key_type 归零 + 温控摘要切换 policy_id=0（参考 Extreme GT）
+thermal_policy_bypass() {
+	if [ -e "$THML_KEY" ]; then
+		echo 0 > "$THML_KEY" 2>/dev/null
+		chmod 444 "$THML_KEY" 2>/dev/null
+	fi
+	if [ -e "$THERMAL_SUMMARY" ]; then
+		[ -f "$SUMMARY_BACKUP" ] || cat "$THERMAL_SUMMARY" > "$SUMMARY_BACKUP" 2>/dev/null
+		echo "[policy_id = 0]" > "$THERMAL_SUMMARY" 2>/dev/null
+	fi
+}
+thermal_policy_restore() {
+	[ -e "$THML_KEY" ] && chmod 644 "$THML_KEY" 2>/dev/null
+	if [ -f "$SUMMARY_BACKUP" ]; then
+		cat "$SUMMARY_BACKUP" > "$THERMAL_SUMMARY" 2>/dev/null
+		rm -f "$SUMMARY_BACKUP"
+	fi
+}
+
+# 关闭 PEM 的「发热禁止后台任务」规则（ThermalRestrictionPlugin 的 forbid_* 项）
+pem_job_restrict_off() {
+	_sys=""
+	for _b in /system/etc/uepp/plugins /system_ext/etc/uepp/plugins /product/etc/uepp/plugins; do
+		[ -d "$_b/$PEM_PLUGIN" ] && { _sys="$_b/$PEM_PLUGIN"; break; }
+	done
+	[ -n "$_sys" ] || return 0
+	_t=""
+	for _n in $(getprop ro.vivo.oem.model) $(getprop ro.vivo.product.model) \
+	          $(getprop ro.vivo.product.platform) $(getprop ro.vivo.product.solution) default; do
+		[ -n "$_n" ] && [ -f "$_sys/$_n.xml" ] && { _t="$_n.xml"; break; }
+	done
+	[ -n "$_t" ] || _t=$(basename "$(ls "$_sys"/*.xml 2>/dev/null | head -1)" 2>/dev/null)
+	[ -n "$_t" ] && [ -f "$_sys/$_t" ] || return 0
+	_dst="$PEM_UNIFIED/$PEM_PLUGIN"
+	_tmp="$D/.job_restrict.tmp"
+	sed -E '/__name__="forbid_/,/\/>/ s/enable[[:space:]]*=[[:space:]]*"1"/enable = "0"/g' "$_sys/$_t" | tr -d '\r' > "$_tmp"
+	[ -s "$_tmp" ] || { rm -f "$_tmp"; return 0; }
+	if cmp -s "$_tmp" "$_dst/$_t" 2>/dev/null; then
+		rm -f "$_tmp"
+		return 0
+	fi
+	mkdir -p "$_dst"
+	cp "$_tmp" "$_dst/$_t"
+	rm -f "$_tmp"
+	chmod 700 "$PEM_UNIFIED" "$_dst" 2>/dev/null
+	chown -R system:system "$PEM_UNIFIED" 2>/dev/null
+	chmod 600 "$_dst/$_t" 2>/dev/null
+	echo "$_dst/$_t" > "$_dst/.iq15_deployed"
+	chmod 600 "$_dst/.iq15_deployed" 2>/dev/null
+	_p=$(pidof com.vivo.pem 2>/dev/null)
+	[ -n "$_p" ] && kill -9 $_p 2>/dev/null
+	return 0
+}
+pem_job_restrict_restore() {
+	_m="$PEM_UNIFIED/$PEM_PLUGIN/.iq15_deployed"
+	[ -f "$_m" ] || return 0
+	for _f in $(cat "$_m" 2>/dev/null); do rm -f "$_f"; done
+	rm -f "$_m"
+	_p=$(pidof com.vivo.pem 2>/dev/null)
+	[ -n "$_p" ] && kill -9 $_p 2>/dev/null
+}
 
 relax_limits() {
 	[ "$(dev_id)" = "iq15" ] || return 1
@@ -359,6 +426,8 @@ relax_limits() {
 		t=$(cat "$cd/type" 2>/dev/null)
 		case "$t" in battery|kgsl|gpu) continue ;; esac
 		echo 0 > "$cd/cur_state" 2>/dev/null
+		# 写保护，防止 thermal-engine 重新写回限频档位
+		chmod 444 "$cd/cur_state" 2>/dev/null
 	done
 	# 再写硬件最大频率
 	for c in /sys/devices/system/cpu/cpu*/cpufreq; do
@@ -371,6 +440,8 @@ relax_limits() {
 		cur=$(cat "$c/scaling_max_freq" 2>/dev/null)
 		[ -n "$mx" ] && [ "$cur" != "$mx" ] && echo "$mx" > "$c/scaling_max_freq" 2>/dev/null
 	done
+	thermal_policy_bypass
+	pem_job_restrict_off
 }
 
 restore_limits() {
@@ -381,6 +452,12 @@ restore_limits() {
 		done < "$FREQ_BACKUP"
 		rm -f "$FREQ_BACKUP"
 	fi
+	# 恢复冷却设备写权限，交还 thermal-engine
+	for cd in /sys/class/thermal/cooling_device*; do
+		chmod 644 "$cd/cur_state" 2>/dev/null
+	done
+	thermal_policy_restore
+	pem_job_restrict_restore
 }
 
 walls_raise() {
