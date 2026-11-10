@@ -1,10 +1,12 @@
 #!/system/bin/sh
 MODDIR=${0%/*}
 [ -f "$MODDIR/module.prop" ] || MODDIR=/data/adb/modules/iqoo15_thermal
+DATA=/data/adb/iqoo15_thermal_data
+mkdir -p "$DATA" 2>/dev/null
 for c in cpu gpu mem modem camera video board shell batt chg usb rf wifi pmic misc; do
-	[ -f "$MODDIR/sw_$c" ] || echo 1 > "$MODDIR/sw_$c"
+	[ -f "$DATA/sw_$c" ] || echo 1 > "$DATA/sw_$c"
 done
-[ -f "$MODDIR/unlock_switch" ] || echo 1 > "$MODDIR/unlock_switch"
+[ -f "$DATA/unlock_switch" ] || echo 1 > "$DATA/unlock_switch"
 chmod 755 "$MODDIR/bin/thermal.sh" 2>/dev/null
 # 每次开机重新抓取 uevent 模板，避免沿用上次开机可能不完整的模板
 rm -f "$MODDIR"/fake/*_uevent.tpl 2>/dev/null

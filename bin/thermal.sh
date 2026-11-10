@@ -10,17 +10,38 @@ case "$SELF" in
 esac
 [ -f "$M/module.prop" ] || M="/data/adb/modules/iqoo15_thermal"
 CONF="$M/conf"
-SW_UNLOCK="$M/unlock_switch"
-TGT=$(cat "$M/target_temp" 2>/dev/null)
+# 开关、备份等运行数据放在模块目录之外，避免模块更新/重装后被默认值覆盖
+D=/data/adb/iqoo15_thermal_data
+mkdir -p "$D" 2>/dev/null
+SW_UNLOCK="$D/unlock_switch"
+TGT=$(cat "$D/target_temp" 2>/dev/null)
 [ -n "$TGT" ] || TGT=34000
 
 FIXED_TEMP=/sys/class/cms_class/fixed_temp
-FIXED_BACKUP="$M/fixed_temp_backup"
-MAP="$M/zone_map.conf"
+FIXED_BACKUP="$D/fixed_temp_backup"
+MAP="$D/zone_map.conf"
 WALL_TARGET=110000
-WALL_BACKUP="$M/walls_backup.conf"
+WALL_BACKUP="$D/walls_backup.conf"
 
 CATS="cpu gpu mem modem camera video board shell batt chg usb rf wifi pmic misc"
+
+# 首次运行：把旧版放在模块目录里的设置迁移到数据目录
+migrate_settings() {
+	[ -f "$D/.migrated" ] && return 0
+	SRC="$M"
+	for _f in unlock_switch conn_switch cycle_switch cycle_value target_temp cycle_real \
+	          cpufreq_backup walls_backup.conf fixed_temp_backup board_temp_backup \
+	          spoofed_paths spoofed_count zone_map.conf; do
+		[ -e "$D/$_f" ] && continue
+		[ -e "$SRC/$_f" ] && cp -f "$SRC/$_f" "$D/$_f" 2>/dev/null
+	done
+	for _c in $CATS; do
+		[ -e "$D/sw_$_c" ] && continue
+		[ -e "$SRC/sw_$_c" ] && cp -f "$SRC/sw_$_c" "$D/sw_$_c" 2>/dev/null
+	done
+	: > "$D/.migrated"
+}
+migrate_settings
 
 dev_id() {
 	case "$(getprop ro.product.device) $(getprop ro.product.model)" in
@@ -68,7 +89,7 @@ cat_of() {
 }
 
 cat_on() {
-	[ "$(cat "$M/sw_$1" 2>/dev/null || echo 1)" = "1" ]
+	[ "$(cat "$D/sw_$1" 2>/dev/null || echo 1)" = "1" ]
 }
 
 # 一次性把 15 个开关读进变量，避免 apply 时 fork 85 次
@@ -77,18 +98,18 @@ load_switches() {
 		[ -n "$k" ] || continue
 		eval "SW_$k=$v"
 	done <<EOF
-$(awk '{ n = FILENAME; sub(/.*\/sw_/, "", n); print n "=" $0 }' "$M"/sw_* 2>/dev/null)
+$(awk '{ n = FILENAME; sub(/.*\/sw_/, "", n); print n "=" $0 }' "$D"/sw_* 2>/dev/null)
 EOF
 }
 
 BOARD_TEMPS="/sys/class/power_supply/battery/primary_board_temp /sys/class/cms_class/primary_board_temp"
-BOARD_BACKUP="$M/board_temp_backup"
+BOARD_BACKUP="$D/board_temp_backup"
 
 # ---- 只读节点用 bind mount 伪装 ----
 FAKE="$M/fake"
-SW_CONN="$M/conn_switch"
-SW_CYCLE="$M/cycle_switch"
-CYCLE_VAL="$M/cycle_value"
+SW_CONN="$D/conn_switch"
+SW_CYCLE="$D/cycle_switch"
+CYCLE_VAL="$D/cycle_value"
 [ -f "$CYCLE_VAL" ] || echo 10 > "$CYCLE_VAL"
 
 # 假文件路径|真实 sysfs 路径
@@ -144,38 +165,38 @@ EOF
 conn_apply() { bind_list_on "$BIND_CONN" "$((TGT / 100))"; }
 conn_clear() { bind_list_off "$BIND_CONN"; }
 cycle_apply() {
-	[ -f "$M/cycle_real" ] || cat /sys/class/power_supply/battery/cycle_count > "$M/cycle_real" 2>/dev/null
+	[ -f "$D/cycle_real" ] || cat /sys/class/power_supply/battery/cycle_count > "$D/cycle_real" 2>/dev/null
 	bind_list_on "$BIND_CYCLE" "$(cat "$CYCLE_VAL" 2>/dev/null || echo 10)"
 }
 cycle_clear() {
 	bind_list_off "$BIND_CYCLE"
-	rm -f "$M/cycle_real" 2>/dev/null
+	rm -f "$D/cycle_real" 2>/dev/null
 }
 
 # ---- uevent 同步守护（循环次数/温度在内核 uevent 里的伪装）----
 UEVENTD="$M/bin/ueventd.sh"
 ueventd_alive() {
-	_up=$(cat "$M/ueventd.pid" 2>/dev/null)
+	_up=$(cat "$D/ueventd.pid" 2>/dev/null)
 	[ -n "$_up" ] && [ -d "/proc/$_up" ] || return 1
 	tr '\0' ' ' < "/proc/$_up/cmdline" 2>/dev/null | grep -q 'ueventd\.sh'
 }
 ueventd_start() {
 	[ -f "$UEVENTD" ] || return 0
-	[ "$(cat "$M/cycle_switch" 2>/dev/null || echo 0)" = "1" ] || \
-		[ "$(cat "$M/sw_batt" 2>/dev/null || echo 1)" = "1" ] || \
-		[ "$(cat "$M/sw_usb" 2>/dev/null || echo 1)" = "1" ] || return 0
+	[ "$(cat "$D/cycle_switch" 2>/dev/null || echo 0)" = "1" ] || \
+		[ "$(cat "$D/sw_batt" 2>/dev/null || echo 1)" = "1" ] || \
+		[ "$(cat "$D/sw_usb" 2>/dev/null || echo 1)" = "1" ] || return 0
 	if ueventd_alive; then
-		: > "$M/ueventd_dirty"
+		: > "$D/ueventd_dirty"
 		return 0
 	fi
 	setsid sh "$UEVENTD" >/dev/null 2>&1 &
-	echo $! > "$M/ueventd.pid"
+	echo $! > "$D/ueventd.pid"
 }
 ueventd_stop() {
 	if ueventd_alive; then
 		kill "$_up" 2>/dev/null
 	fi
-	rm -f "$M/ueventd.pid"
+	rm -f "$D/ueventd.pid"
 	for _d in battery bq_bms fg_sh366101 usb wireless; do
 		umount_force "/sys/class/power_supply/$_d/uevent"
 	done
@@ -203,8 +224,8 @@ clear_batt_extra() {
 	fi
 }
 
-WALL_CACHE="$M/walls_count_cache"
-WALL_CACHE_T="$M/walls_count_time"
+WALL_CACHE="$D/walls_count_cache"
+WALL_CACHE_T="$D/walls_count_time"
 
 walls_count_cached() {
 	now=$(date +%s)
@@ -267,16 +288,16 @@ apply_spoof() {
 	load_switches
 	# 上一轮写过、但本轮映射里已不存在的路径（热区重新编号）先清零
 	# 用一次 awk 求出差集，避免每个路径 fork 一次 grep
-	if [ -f "$M/spoofed_paths" ]; then
+	if [ -f "$D/spoofed_paths" ]; then
 		awk 'NR == FNR { if ($0 != "") old[$0] = 1; next }
 			{ split($0, a, "|"); if (a[1] in old) delete old[a[1]] }
 			END { for (p in old) print p }' \
-			"$M/spoofed_paths" "$MAP" > "$M/stale.tmp" 2>/dev/null
+			"$D/spoofed_paths" "$MAP" > "$D/stale.tmp" 2>/dev/null
 		while IFS= read -r op; do
 			[ -n "$op" ] && [ -d "$op" ] || continue
 			echo 0 > "$op/emul_temp" 2>/dev/null
-		done < "$M/stale.tmp"
-		rm -f "$M/stale.tmp"
+		done < "$D/stale.tmp"
+		rm -f "$D/stale.tmp"
 	fi
 	NEWP=""
 	n=0
@@ -294,8 +315,8 @@ apply_spoof() {
 		NEWP="$NEWP$p
 "
 	done < "$MAP"
-	printf '%s' "$NEWP" > "$M/spoofed_paths"
-	echo "$n" > "$M/spoofed_count" 2>/dev/null
+	printf '%s' "$NEWP" > "$D/spoofed_paths"
+	echo "$n" > "$D/spoofed_count" 2>/dev/null
 	if [ "$SW_batt" = "1" ]; then set_fixed_temp; set_batt_extra; else clear_fixed_temp; clear_batt_extra; fi
 	if [ "$(cat "$SW_CONN" 2>/dev/null || echo 1)" = "1" ]; then conn_apply; else conn_clear; fi
 	if [ "$(cat "$SW_CYCLE" 2>/dev/null || echo 0)" = "1" ]; then cycle_apply; else cycle_clear; fi
@@ -312,7 +333,7 @@ clear_spoof() {
 		is_keep "$t" && continue
 		echo 0 > "$p/emul_temp" 2>/dev/null && n=$((n+1))
 	done < "$MAP"
-	echo 0 > "$M/spoofed_count" 2>/dev/null
+	echo 0 > "$D/spoofed_count" 2>/dev/null
 	clear_fixed_temp
 	clear_batt_extra
 	conn_clear
@@ -321,7 +342,7 @@ clear_spoof() {
 	echo "已还原 $n 个热区"
 }
 
-FREQ_BACKUP="$M/cpufreq_backup"
+FREQ_BACKUP="$D/cpufreq_backup"
 
 relax_limits() {
 	[ "$(dev_id)" = "iq15" ] || return 1
@@ -382,13 +403,13 @@ walls_raise() {
 		k = t "|" i
 		printf "%s|%s|%s|%s|%d\n", d, t, i, v, (k in have) ? 0 : 1
 	}
-	' "$CONF/keep_real.conf" "$MAP" /sys/class/thermal/thermal_zone*/trip_point_*_temp > "$M/walls_todo.tmp" 2>/dev/null
+	' "$CONF/keep_real.conf" "$MAP" /sys/class/thermal/thermal_zone*/trip_point_*_temp > "$D/walls_todo.tmp" 2>/dev/null
 	while IFS='|' read -r d t i v isnew; do
 		[ -n "$d" ] || continue
 		[ "$isnew" = "1" ] && echo "$t|$i|$v" >> "$WALL_BACKUP"
 		echo "$WALL_TARGET" > "$d/trip_point_${i}_temp" 2>/dev/null
-	done < "$M/walls_todo.tmp"
-	rm -f "$M/walls_todo.tmp"
+	done < "$D/walls_todo.tmp"
+	rm -f "$D/walls_todo.tmp"
 	walls_count_refresh
 	echo "已抬高 $(cat "$WALL_CACHE" 2>/dev/null || echo 0) 处温度墙到 $((WALL_TARGET / 1000))°C"
 }
@@ -437,7 +458,7 @@ show_status() {
 		echo "cat_$c=$v"
 		[ "$v" = "1" ] && on=$((on+1))
 	done <<EOF
-$(awk '{n=FILENAME; sub(/.*\/sw_/, "", n); print n "=" $0}' "$M"/sw_* 2>/dev/null)
+$(awk '{n=FILENAME; sub(/.*\/sw_/, "", n); print n "=" $0}' "$D"/sw_* 2>/dev/null)
 EOF
 	[ "$on" -gt 0 ] && any=1
 	echo "any=$any"
@@ -446,10 +467,10 @@ EOF
 	echo "conn=$(cat "$SW_CONN" 2>/dev/null || echo 1)"
 	echo "cycle=$(cat "$SW_CYCLE" 2>/dev/null || echo 0)"
 	echo "cycleval=$(cat "$CYCLE_VAL" 2>/dev/null || echo 10)"
-	echo "cyc_real=$(cat "$M/cycle_real" 2>/dev/null || cat /sys/class/power_supply/battery/cycle_count 2>/dev/null || echo 0)"
+	echo "cyc_real=$(cat "$D/cycle_real" 2>/dev/null || cat /sys/class/power_supply/battery/cycle_count 2>/dev/null || echo 0)"
 	echo "usbconn=$(cat /sys/class/cms_class/usb_conn_temp 2>/dev/null || echo 0)"
-	echo "zones=$(cat "$M/spoofed_count" 2>/dev/null || echo 0)"
-	echo "target=$(fmt_mdeg $(cat "$M/target_temp" 2>/dev/null || echo 34000))"
+	echo "zones=$(cat "$D/spoofed_count" 2>/dev/null || echo 0)"
+	echo "target=$(fmt_mdeg $(cat "$D/target_temp" 2>/dev/null || echo 34000))"
 	echo "walls=$(walls_count_cached)"
 	q=""; a=""; c=""; g=""; m=""; ic=""; u=""; b=""; bz=""
 	while IFS='=' read -r t v; do
@@ -498,12 +519,12 @@ status) show_status ;;
 zones) show_zones ;;
 cat)
 	case "$2" in
-		"") for c in $CATS; do echo "$c=$(cat "$M/sw_$c" 2>/dev/null || echo 1)"; done ;;
+		"") for c in $CATS; do echo "$c=$(cat "$D/sw_$c" 2>/dev/null || echo 1)"; done ;;
 		*)
 			case "$3" in
-				on|1) set_switch "$M/sw_$2" 1; apply_spoof ;;
-				off|0) set_switch "$M/sw_$2" 0; apply_spoof ;;
-				*) echo "$2=$(cat "$M/sw_$2" 2>/dev/null || echo 1)" ;;
+				on|1) set_switch "$D/sw_$2" 1; apply_spoof ;;
+				off|0) set_switch "$D/sw_$2" 0; apply_spoof ;;
+				*) echo "$2=$(cat "$D/sw_$2" 2>/dev/null || echo 1)" ;;
 			esac
 			;;
 	esac
@@ -512,7 +533,7 @@ unlock)
 	case "$2" in
 		on|1)
 			set_switch "$SW_UNLOCK" 1
-			[ "$(cat "$M/spoofed_count" 2>/dev/null || echo 0)" != "0" ] || apply_spoof
+			[ "$(cat "$D/spoofed_count" 2>/dev/null || echo 0)" != "0" ] || apply_spoof
 			walls_raise
 			relax_limits
 			echo "已解除温控降频"
@@ -559,13 +580,13 @@ walls)
 all)
 	case "$2" in
 		on|1)
-			for c in $CATS; do set_switch "$M/sw_$c" 1; done
+			for c in $CATS; do set_switch "$D/sw_$c" 1; done
 			set_switch "$SW_UNLOCK" 1
 			set_switch "$SW_CONN" 1
 			set_switch "$SW_CYCLE" 1
 			apply_spoof; walls_raise; relax_limits ;;
 		off|0)
-			for c in $CATS; do set_switch "$M/sw_$c" 0; done
+			for c in $CATS; do set_switch "$D/sw_$c" 0; done
 			set_switch "$SW_UNLOCK" 0
 			set_switch "$SW_CONN" 0
 			set_switch "$SW_CYCLE" 0
@@ -574,7 +595,7 @@ all)
 	;;
 apply)
 	any=0
-	for c in $CATS; do [ "$(cat "$M/sw_$c" 2>/dev/null || echo 1)" = "1" ] && any=1; done
+	for c in $CATS; do [ "$(cat "$D/sw_$c" 2>/dev/null || echo 1)" = "1" ] && any=1; done
 	[ "$any" = "1" ] || [ "$(cat "$SW_UNLOCK" 2>/dev/null || echo 0)" = "1" ] || exit 0
 	apply_spoof
 	[ "$(cat "$SW_UNLOCK" 2>/dev/null || echo 0)" = "1" ] && { walls_raise; relax_limits; }
@@ -582,17 +603,17 @@ apply)
 ueventd) ueventd_start ;;
 apply-early)
 	any=0
-	for c in $CATS; do [ "$(cat "$M/sw_$c" 2>/dev/null || echo 1)" = "1" ] && any=1; done
+	for c in $CATS; do [ "$(cat "$D/sw_$c" 2>/dev/null || echo 1)" = "1" ] && any=1; done
 	[ "$any" = "1" ] && apply_spoof
 	;;
 target)
 	if [ -n "$2" ]; then
 		v=$(($2 * 1000))
 		[ "$v" -ge 25000 ] && [ "$v" -le 60000 ] || { echo "范围 25-60"; exit 1; }
-		echo "$v" > "$M/target_temp"
+		echo "$v" > "$D/target_temp"
 		apply_spoof
 	else
-		echo "当前目标 $(fmt_mdeg $(cat "$M/target_temp" 2>/dev/null || echo 34000))°C"
+		echo "当前目标 $(fmt_mdeg $(cat "$D/target_temp" 2>/dev/null || echo 34000))°C"
 	fi
 	;;
 *)

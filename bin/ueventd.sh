@@ -3,11 +3,13 @@
 # 这里用「模板 + 定时重生成」的方式 bind mount 覆盖，保证循环次数/温度在所有读取路径都一致。
 M="${0%/bin/ueventd.sh}"
 [ -f "$M/module.prop" ] || M=/data/adb/modules/iqoo15_thermal
+D=/data/adb/iqoo15_thermal_data
+mkdir -p "$D" 2>/dev/null
 FAKE="$M/fake"
-PIDF="$M/ueventd.pid"
-CYC_FILE="$M/cycle_value"
-TGT_FILE="$M/target_temp"
-DIRTY="$M/ueventd_dirty"
+PIDF="$D/ueventd.pid"
+CYC_FILE="$D/cycle_value"
+TGT_FILE="$D/target_temp"
+DIRTY="$D/ueventd_dirty"
 
 mkdir -p "$FAKE"
 
@@ -92,9 +94,9 @@ sync_one() {
 }
 
 sync_all() {
-	cyc=$(cat "$M/cycle_switch" 2>/dev/null || echo 0)
-	batt=$(cat "$M/sw_batt" 2>/dev/null || echo 1)
-	usb=$(cat "$M/sw_usb" 2>/dev/null || echo 1)
+	cyc=$(cat "$D/cycle_switch" 2>/dev/null || echo 0)
+	batt=$(cat "$D/sw_batt" 2>/dev/null || echo 1)
+	usb=$(cat "$D/sw_usb" 2>/dev/null || echo 1)
 	if [ "$cyc" != "1" ] && [ "$batt" != "1" ] && [ "$usb" != "1" ]; then
 		stop_all
 	fi

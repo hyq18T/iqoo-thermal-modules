@@ -2,6 +2,7 @@
 # 卸载：还原 bind mount、电池 fixed_temp、主板温度与全部热区
 MODDIR=${0%/*}
 [ -f "$MODDIR/module.prop" ] || MODDIR=/data/adb/modules/iqoo15_thermal
+D=/data/adb/iqoo15_thermal_data
 
 uf() {
 	i=0
@@ -12,9 +13,9 @@ uf() {
 }
 
 # 先停 uevent 守护并卸掉它的挂载
-p=$(cat "$MODDIR/ueventd.pid" 2>/dev/null)
+p=$(cat "$D/ueventd.pid" 2>/dev/null)
 [ -n "$p" ] && kill "$p" 2>/dev/null
-rm -f "$MODDIR/ueventd.pid"
+rm -f "$D/ueventd.pid"
 for n in battery bq_bms fg_sh366101 usb wireless; do
 	uf "/sys/class/power_supply/$n/uevent"
 done
@@ -28,19 +29,19 @@ for d in /sys/class/cms_class/usb_conn_temp /sys/class/cms_class/main_batt_temp 
 done
 
 # 主板温度还原
-if [ -f "$MODDIR/board_temp_backup" ]; then
-	cp "$MODDIR/board_temp_backup" "$MODDIR/board_temp_backup.tmp"
+if [ -f "$D/board_temp_backup" ]; then
+	cp "$D/board_temp_backup" "$D/board_temp_backup.tmp"
 	while IFS='|' read -r f v; do
 		[ -n "$f" ] && [ -e "$f" ] && echo "$v" > "$f" 2>/dev/null
-	done < "$MODDIR/board_temp_backup.tmp"
-	rm -f "$MODDIR/board_temp_backup.tmp"
+	done < "$D/board_temp_backup.tmp"
+	rm -f "$D/board_temp_backup.tmp"
 fi
 
 # 电池上报温度还原
 F=/sys/class/cms_class/fixed_temp
 if [ -e "$F" ]; then
-	if [ -f "$MODDIR/fixed_temp_backup" ]; then
-		v=$(cat "$MODDIR/fixed_temp_backup" 2>/dev/null)
+	if [ -f "$D/fixed_temp_backup" ]; then
+		v=$(cat "$D/fixed_temp_backup" 2>/dev/null)
 		v=${v:-0}
 		echo "$v" > "$F" 2>/dev/null
 	else
@@ -52,12 +53,12 @@ fi
 if [ -f "$MODDIR/bin/thermal.sh" ]; then
 	sh "$MODDIR/bin/thermal.sh" all off >/dev/null 2>&1
 fi
-if [ -f "$MODDIR/cpufreq_backup" ]; then
+if [ -f "$D/cpufreq_backup" ]; then
 	while IFS='|' read -r c v; do
 		[ -n "$c" ] && [ -n "$v" ] && [ -e "$c/scaling_max_freq" ] && echo "$v" > "$c/scaling_max_freq" 2>/dev/null
-	done < "$MODDIR/cpufreq_backup"
+	done < "$D/cpufreq_backup"
 fi
-if [ -f "$MODDIR/walls_backup.conf" ]; then
+if [ -f "$D/walls_backup.conf" ]; then
 	while IFS='|' read -r t idx orig; do
 		[ -n "$t" ] || continue
 		for tz in /sys/class/thermal/thermal_zone*; do
@@ -66,10 +67,11 @@ if [ -f "$MODDIR/walls_backup.conf" ]; then
 				break
 			fi
 		done
-	done < "$MODDIR/walls_backup.conf"
+	done < "$D/walls_backup.conf"
 fi
 
 for tz in /sys/class/thermal/thermal_zone*; do
 	[ -e "$tz/emul_temp" ] && echo 0 > "$tz/emul_temp" 2>/dev/null
 done
+rm -rf "$D" 2>/dev/null
 rm -f /data/local/tmp/iqoo15_thermal.log 2>/dev/null

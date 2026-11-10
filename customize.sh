@@ -94,16 +94,33 @@ if [ "$has_cool" != "1" ]; then
 	ui_print "! 注意：未找到 cooling_device，解除温控时无法清零冷却状态"
 fi
 
-# ---------- 开关默认值 ----------
+# ---------- 运行数据目录（模块更新 / 重装都不会覆盖）----------
+DATA=/data/adb/iqoo15_thermal_data
+OLD=/data/adb/modules/iqoo15_thermal
+mkdir -p "$DATA"
+if [ ! -f "$DATA/.migrated" ]; then
+	for f in unlock_switch conn_switch cycle_switch cycle_value target_temp cycle_real \
+	         cpufreq_backup walls_backup.conf fixed_temp_backup board_temp_backup \
+	         spoofed_paths spoofed_count zone_map.conf; do
+		[ -e "$DATA/$f" ] && continue
+		[ -e "$OLD/$f" ] && cp -f "$OLD/$f" "$DATA/$f" 2>/dev/null
+	done
+	for c in cpu gpu mem modem camera video board shell batt chg usb rf wifi pmic misc; do
+		[ -e "$DATA/sw_$c" ] && continue
+		[ -e "$OLD/sw_$c" ] && cp -f "$OLD/sw_$c" "$DATA/sw_$c" 2>/dev/null
+	done
+	: > "$DATA/.migrated"
+fi
 for c in cpu gpu mem modem camera video board shell batt chg usb rf wifi pmic misc; do
-	[ -f $MODPATH/sw_$c ] || echo 1 > $MODPATH/sw_$c
+	[ -f "$DATA/sw_$c" ] || echo 1 > "$DATA/sw_$c"
 done
-[ -f $MODPATH/unlock_switch ] || echo 1 > $MODPATH/unlock_switch
-[ -f $MODPATH/conn_switch ] || echo 1 > $MODPATH/conn_switch
-[ -f $MODPATH/cycle_switch ] || echo 0 > $MODPATH/cycle_switch
-[ -f $MODPATH/cycle_value ] || echo 22 > $MODPATH/cycle_value
-[ -f $MODPATH/target_temp ] || echo 34000 > $MODPATH/target_temp
+[ -f "$DATA/unlock_switch" ] || echo 1 > "$DATA/unlock_switch"
+[ -f "$DATA/conn_switch" ] || echo 1 > "$DATA/conn_switch"
+[ -f "$DATA/cycle_switch" ] || echo 0 > "$DATA/cycle_switch"
+[ -f "$DATA/cycle_value" ] || echo 22 > "$DATA/cycle_value"
+[ -f "$DATA/target_temp" ] || echo 34000 > "$DATA/target_temp"
 
-ui_print "- iQOO 15 温控管家 1.7.4"
+ui_print "- iQOO 15 温控管家 1.7.5"
 ui_print "- 15 个温度分类独立开关，统一伪装 34°C"
+ui_print "- 开关设置保存在 $DATA，更新模块不会重置"
 ui_print "- 环境检测通过"
