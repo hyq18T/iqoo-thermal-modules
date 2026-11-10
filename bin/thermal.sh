@@ -14,6 +14,7 @@ CONF="$M/conf"
 D=/data/adb/iqoo15_thermal_data
 mkdir -p "$D" 2>/dev/null
 SW_UNLOCK="$D/unlock_switch"
+SW_WALL="$D/wall_switch"
 TGT=$(cat "$D/target_temp" 2>/dev/null)
 [ -n "$TGT" ] || TGT=34000
 
@@ -29,7 +30,7 @@ CATS="cpu gpu mem modem camera video board shell batt chg usb rf wifi pmic misc"
 migrate_settings() {
 	[ -f "$D/.migrated" ] && return 0
 	SRC="$M"
-	for _f in unlock_switch conn_switch cycle_switch cycle_value target_temp cycle_real \
+	for _f in unlock_switch wall_switch conn_switch cycle_switch cycle_value target_temp cycle_real \
 	          cpufreq_backup walls_backup.conf fixed_temp_backup board_temp_backup \
 	          spoofed_paths spoofed_count zone_map.conf; do
 		[ -e "$D/$_f" ] && continue
@@ -448,6 +449,13 @@ relax_limits() {
 	done
 	thermal_policy_bypass
 	pem_job_restrict_off
+	# thermal-engine 启停可能清掉 fixed_temp，重新锁定电池上报温度
+	if [ "$(cat "$D/sw_batt" 2>/dev/null || echo 1)" = "1" ]; then set_fixed_temp; set_batt_extra; fi
+	# 带风扇机型：接管风扇曲线（thermal-engine 已被停止，避免抢 PWM）
+	if [ -e /dev/fanpwm ] && [ -x "$M/bin/fanctld" ]; then
+		killall fanctld 2>/dev/null
+		nohup "$M/bin/fanctld" >/dev/null 2>&1 &
+	fi
 }
 
 restore_limits() {
@@ -473,6 +481,9 @@ restore_limits() {
 	done
 	thermal_policy_restore
 	pem_job_restrict_restore
+	killall fanctld 2>/dev/null
+	# thermal-engine 重新启动后可能清掉 fixed_temp，保持伪装则重新写入
+	if [ "$(cat "$D/sw_batt" 2>/dev/null || echo 1)" = "1" ]; then set_fixed_temp; set_batt_extra; fi
 }
 
 walls_raise() {
@@ -564,6 +575,7 @@ EOF
 	echo "any=$any"
 	echo "cats=$on"
 	echo "unlock=$(cat "$SW_UNLOCK" 2>/dev/null || echo 0)"
+	echo "wall=$(cat "$SW_WALL" 2>/dev/null || echo 1)"
 	echo "conn=$(cat "$SW_CONN" 2>/dev/null || echo 1)"
 	echo "cycle=$(cat "$SW_CYCLE" 2>/dev/null || echo 0)"
 	echo "cycleval=$(cat "$CYCLE_VAL" 2>/dev/null || echo 10)"
@@ -634,13 +646,11 @@ unlock)
 		on|1)
 			set_switch "$SW_UNLOCK" 1
 			[ "$(cat "$D/spoofed_count" 2>/dev/null || echo 0)" != "0" ] || apply_spoof
-			walls_raise
 			relax_limits
 			echo "已解除温控降频"
 			;;
 		off|0)
 			set_switch "$SW_UNLOCK" 0
-			walls_restore
 			restore_limits
 			echo "已恢复温控限制"
 			;;
@@ -672,8 +682,8 @@ cycle)
 	;;
 walls)
 	case "$2" in
-		on|1) walls_raise ;;
-		off|0) walls_restore ;;
+		on|1) set_switch "$SW_WALL" 1; walls_raise ;;
+		off|0) set_switch "$SW_WALL" 0; walls_restore ;;
 		*) echo "已抬高 $(walls_count) 处" ;;
 	esac
 	;;
@@ -682,12 +692,14 @@ all)
 		on|1)
 			for c in $CATS; do set_switch "$D/sw_$c" 1; done
 			set_switch "$SW_UNLOCK" 1
+			set_switch "$SW_WALL" 1
 			set_switch "$SW_CONN" 1
 			set_switch "$SW_CYCLE" 1
 			apply_spoof; walls_raise; relax_limits ;;
 		off|0)
 			for c in $CATS; do set_switch "$D/sw_$c" 0; done
 			set_switch "$SW_UNLOCK" 0
+			set_switch "$SW_WALL" 0
 			set_switch "$SW_CONN" 0
 			set_switch "$SW_CYCLE" 0
 			clear_spoof; walls_restore; restore_limits ;;
@@ -698,7 +710,8 @@ apply)
 	for c in $CATS; do [ "$(cat "$D/sw_$c" 2>/dev/null || echo 1)" = "1" ] && any=1; done
 	[ "$any" = "1" ] || [ "$(cat "$SW_UNLOCK" 2>/dev/null || echo 0)" = "1" ] || exit 0
 	apply_spoof
-	[ "$(cat "$SW_UNLOCK" 2>/dev/null || echo 0)" = "1" ] && { walls_raise; relax_limits; }
+	[ "$(cat "$SW_WALL" 2>/dev/null || echo 1)" = "1" ] && walls_raise
+	[ "$(cat "$SW_UNLOCK" 2>/dev/null || echo 0)" = "1" ] && relax_limits
 	;;
 ueventd) ueventd_start ;;
 apply-early)

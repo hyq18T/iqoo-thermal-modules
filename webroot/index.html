@@ -3651,10 +3651,17 @@ body.aat-bg-black.aat-liquid-glass #notice-btn{
 
   <div class="card">
     <div class="ch"><span class="ct">开关</span></div>
+    <div class="liquid-glass-setting-row">
+      <div>
+        <div class="appearance-setting-title">提高温控墙</div>
+        <div class="appearance-setting-sub">把低于 110°C 的温度墙全部抬到 110°C，关闭后按备份还原。</div>
+      </div>
+      <label class="tog" style="flex-shrink:0"><input type="checkbox" id="e-wall" onchange="togWall(this)"><span class="tk"></span></label>
+    </div>
     <div class="liquid-glass-setting-row" style="border-bottom:none">
       <div>
         <div class="appearance-setting-title">解除温控降频</div>
-        <div class="appearance-setting-sub">温度墙低于 110°C 的全部抬到 110°C；CPU 恢复设计频率上限、清空冷却设备。温度伪装请到「配置」页逐项开关。</div>
+        <div class="appearance-setting-sub">关闭厂商温控服务、卸载冷却限频驱动、CPU 恢复硬件满频、清空冷却设备。温度伪装请到「配置」页逐项开关。</div>
       </div>
       <label class="tog" style="flex-shrink:0"><input type="checkbox" id="e-unlock" onchange="togUnlock(this)"><span class="tk"></span></label>
     </div>
@@ -3678,7 +3685,7 @@ body.aat-bg-black.aat-liquid-glass #notice-btn{
     <div class="si-row"><div class="si-label">平台</div><div class="si-val mono" id="s-plat">--</div></div>
     <div class="si-row"><div class="si-label">内核</div><div class="si-val small mono" id="s-kern">--</div></div>
     <div class="si-row"><div class="si-label">已抬高温度墙</div><div class="si-val" id="s-walls">--</div></div>
-    <div class="si-row" style="border-bottom:none"><div class="si-label">模块版本</div><div class="si-val" id="s-ver">v1.7.8</div></div>
+    <div class="si-row" style="border-bottom:none"><div class="si-label">模块版本</div><div class="si-val" id="s-ver">v1.7.9</div></div>
   </div>
 </div>
 
@@ -3923,7 +3930,7 @@ async function loadStatus(){
   document.getElementById('s-mdl').textContent = o.model || '--';
   document.getElementById('s-plat').textContent = o.plat || '--';
   document.getElementById('s-kern').textContent = o.kern || '--';
-  document.getElementById('s-ver').textContent = 'v1.7.8';
+  document.getElementById('s-ver').textContent = 'v1.7.9';
   document.getElementById('s-walls').textContent = (o.walls || '0') + ' 处';
   document.getElementById('catBadge').textContent = (o.cats || '0') + '/' + CATS.length;
   document.getElementById('t-cpu').textContent = (o.cpu || '--') + '°C';
@@ -3935,6 +3942,7 @@ async function loadStatus(){
   document.getElementById('t-batt').textContent = (o.battery || '--') + '°C';
   document.getElementById('t-battz').textContent = (o.battz || '--') + '°C';
   CATS.forEach(function(c){ setTgl('c-' + c.k, o['cat_' + c.k] === '1'); });
+  setTgl('e-wall', o.wall === '1');
   setTgl('e-unlock', o.unlock === '1');
   setTgl('e-conn', o.conn === '1');
   setTgl('e-cycle', o.cycle === '1');
@@ -3981,6 +3989,13 @@ async function togCat(key, el){
   busy = true;
   document.getElementById('s-sub').textContent = '写入中…';
   var out = await sh('sh ' + BIN + ' cat ' + key + ' ' + (el.checked ? 'on' : 'off'));
+  busy = false;
+  document.getElementById('s-sub').textContent = out || '';
+  setTimeout(loadStatus, 400);
+}
+async function togWall(el){
+  busy = true;
+  var out = await sh('sh ' + BIN + ' walls ' + (el.checked ? 'on' : 'off'));
   busy = false;
   document.getElementById('s-sub').textContent = out || '';
   setTimeout(loadStatus, 400);

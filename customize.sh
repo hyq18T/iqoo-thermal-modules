@@ -100,7 +100,7 @@ DATA=/data/adb/iqoo15_thermal_data
 OLD=/data/adb/modules/iqoo15_thermal
 mkdir -p "$DATA"
 if [ ! -f "$DATA/.migrated" ]; then
-	for f in unlock_switch conn_switch cycle_switch cycle_value target_temp cycle_real \
+	for f in unlock_switch wall_switch conn_switch cycle_switch cycle_value target_temp cycle_real \
 	         cpufreq_backup walls_backup.conf fixed_temp_backup board_temp_backup \
 	         spoofed_paths spoofed_count zone_map.conf; do
 		[ -e "$DATA/$f" ] && continue
@@ -116,6 +116,7 @@ for c in cpu gpu mem modem camera video board shell batt chg usb rf wifi pmic mi
 	[ -f "$DATA/sw_$c" ] || echo 1 > "$DATA/sw_$c"
 done
 [ -f "$DATA/unlock_switch" ] || echo 1 > "$DATA/unlock_switch"
+[ -f "$DATA/wall_switch" ] || echo 1 > "$DATA/wall_switch"
 [ -f "$DATA/conn_switch" ] || echo 1 > "$DATA/conn_switch"
 [ -f "$DATA/cycle_switch" ] || echo 0 > "$DATA/cycle_switch"
 [ -f "$DATA/cycle_value" ] || echo 22 > "$DATA/cycle_value"

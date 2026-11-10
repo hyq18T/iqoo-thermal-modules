@@ -14,10 +14,4 @@ done
 sleep 3
 sh "$BIN" apply >> "$LOG" 2>&1
 sh "$BIN" ueventd >> "$LOG" 2>&1
-
-# 带风扇的机型（有 /dev/fanpwm）：接管风扇，按 fan.conf 曲线调速
-if [ -e /dev/fanpwm ] && [ -x "$MODDIR/bin/fanctld" ]; then
-	killall fanctld 2>/dev/null
-	nohup "$MODDIR/bin/fanctld" >/dev/null 2>&1 &
-fi
 echo "# done" >> "$LOG"

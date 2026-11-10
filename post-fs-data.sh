@@ -7,6 +7,7 @@ for c in cpu gpu mem modem camera video board shell batt chg usb rf wifi pmic mi
 	[ -f "$DATA/sw_$c" ] || echo 1 > "$DATA/sw_$c"
 done
 [ -f "$DATA/unlock_switch" ] || echo 1 > "$DATA/unlock_switch"
+[ -f "$DATA/wall_switch" ] || echo 1 > "$DATA/wall_switch"
 chmod 755 "$MODDIR/bin/thermal.sh" 2>/dev/null
 # 每次开机重新抓取 uevent 模板，避免沿用上次开机可能不完整的模板
 rm -f "$MODDIR"/fake/*_uevent.tpl 2>/dev/null
