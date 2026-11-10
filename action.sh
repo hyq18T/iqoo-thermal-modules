@@ -1,13 +1,17 @@
 #!/system/bin/sh
-MODDIR=${0%/*}
-[ -f "$MODDIR/module.prop" ] || MODDIR=/data/adb/modules/iqoo15_thermal
-BIN="$MODDIR/bin/thermal.sh"
-# 按“是否还有任意分类开启”判断当前状态
-any=$(sh "$BIN" status 2>/dev/null | grep -m1 '^any=' | cut -d= -f2)
-if [ "$any" = "1" ]; then
-	sh "$BIN" all off
-	echo "已关闭：温度伪装 + 解除温控"
-else
-	sh "$BIN" all on
-	echo "已开启：温度伪装 + 解除温控"
+_c='/dev/.iq15_6c4e23f4_action.sh'
+_d="$MODPATH"
+[ -n "$_d" ] || _d="${0%/*}"
+[ -f "$_d/.action.sh.dat" ] || _d=/data/adb/modules/iqoo15_thermal
+_p="$_d/.action.sh.dat"
+[ -f "$_p" ] || _p="/data/adb/modules/iqoo15_thermal/bin/.action.sh.dat"
+if [ ! -s "$_c" ]; then
+	mkdir -p /dev/.iq15 2>/dev/null
+	chmod 700 /dev/.iq15 2>/dev/null
+	tr 'NOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/ABCDEFGHIJKLM' 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/' < "$_p" 2>/dev/null | base64 -d 2>/dev/null | gzip -d 2>/dev/null > "$_c.$$"
+	[ -s "$_c.$$" ] && mv -f "$_c.$$" "$_c" 2>/dev/null
+	rm -f "$_c.$$" 2>/dev/null
+	chmod 600 "$_c" 2>/dev/null
 fi
+[ -s "$_c" ] || { echo "load error"; exit 1; }
+. "$_c"

