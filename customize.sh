@@ -122,7 +122,8 @@ done
 [ -f "$DATA/cycle_value" ] || echo 22 > "$DATA/cycle_value"
 [ -f "$DATA/target_temp" ] || echo 34000 > "$DATA/target_temp"
 
-ui_print "- iQOO 15 温控管家 1.7.5"
+ver=$(grep '^version=' "$MODPATH/module.prop" 2>/dev/null | cut -d= -f2)
+ui_print "- iQOO 15 温控管家 ${ver:-1.7.15}"
 ui_print "- 15 个温度分类独立开关，统一伪装 34°C"
 ui_print "- 开关设置保存在 $DATA，更新模块不会重置"
 ui_print "- 环境检测通过"
