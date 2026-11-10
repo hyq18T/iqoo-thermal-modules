@@ -354,14 +354,22 @@ relax_limits() {
 			[ -n "$v" ] && echo "$c|$v" >> "$FREQ_BACKUP"
 		done
 	fi
+	# 必须先清空冷却设备：cpufreq cooling 的限频状态会把 scaling_max_freq 钳在低档
+	for cd in /sys/class/thermal/cooling_device*; do
+		t=$(cat "$cd/type" 2>/dev/null)
+		case "$t" in battery|kgsl|gpu) continue ;; esac
+		echo 0 > "$cd/cur_state" 2>/dev/null
+	done
+	# 再写硬件最大频率
 	for c in /sys/devices/system/cpu/cpu*/cpufreq; do
 		mx=$(cat "$c/cpuinfo_max_freq" 2>/dev/null)
 		[ -n "$mx" ] && echo "$mx" > "$c/scaling_max_freq" 2>/dev/null
 	done
-	for cd in /sys/class/thermal/cooling_device*; do
-		t=$(cat "$cd/type" 2>/dev/null)
-		case "$t" in battery) continue ;; esac
-		echo 0 > "$cd/cur_state" 2>/dev/null
+	# 仍被钳制的话再补写一次
+	for c in /sys/devices/system/cpu/cpu*/cpufreq; do
+		mx=$(cat "$c/cpuinfo_max_freq" 2>/dev/null)
+		cur=$(cat "$c/scaling_max_freq" 2>/dev/null)
+		[ -n "$mx" ] && [ "$cur" != "$mx" ] && echo "$mx" > "$c/scaling_max_freq" 2>/dev/null
 	done
 }
 

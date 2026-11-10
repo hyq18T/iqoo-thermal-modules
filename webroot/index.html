@@ -3678,7 +3678,7 @@ body.aat-bg-black.aat-liquid-glass #notice-btn{
     <div class="si-row"><div class="si-label">平台</div><div class="si-val mono" id="s-plat">--</div></div>
     <div class="si-row"><div class="si-label">内核</div><div class="si-val small mono" id="s-kern">--</div></div>
     <div class="si-row"><div class="si-label">已抬高温度墙</div><div class="si-val" id="s-walls">--</div></div>
-    <div class="si-row" style="border-bottom:none"><div class="si-label">模块版本</div><div class="si-val" id="s-ver">v1.7.5</div></div>
+    <div class="si-row" style="border-bottom:none"><div class="si-label">模块版本</div><div class="si-val" id="s-ver">v1.7.6</div></div>
   </div>
 </div>
 
@@ -3923,7 +3923,7 @@ async function loadStatus(){
   document.getElementById('s-mdl').textContent = o.model || '--';
   document.getElementById('s-plat').textContent = o.plat || '--';
   document.getElementById('s-kern').textContent = o.kern || '--';
-  document.getElementById('s-ver').textContent = 'v1.7.5';
+  document.getElementById('s-ver').textContent = 'v1.7.6';
   document.getElementById('s-walls').textContent = (o.walls || '0') + ' 处';
   document.getElementById('catBadge').textContent = (o.cats || '0') + '/' + CATS.length;
   document.getElementById('t-cpu').textContent = (o.cpu || '--') + '°C';
