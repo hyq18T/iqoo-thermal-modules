@@ -12,7 +12,8 @@ uf() {
 	done
 }
 
-# 先停 uevent 守护并卸掉它的挂载
+# 先停 uevent 守护与风扇守护并卸掉它们的挂载
+killall fanctld 2>/dev/null
 p=$(cat "$D/ueventd.pid" 2>/dev/null)
 [ -n "$p" ] && kill "$p" 2>/dev/null
 rm -f "$D/ueventd.pid"

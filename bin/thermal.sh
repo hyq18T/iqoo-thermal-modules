@@ -421,6 +421,12 @@ relax_limits() {
 			[ -n "$v" ] && echo "$c|$v" >> "$FREQ_BACKUP"
 		done
 	fi
+	# 关闭厂商温控服务（thermal_core/thermald 常见于 MTK 与部分 vivo 机型）
+	for _svc in thermal_core thermald thermal-engine; do
+		setprop ctl.stop "$_svc" 2>/dev/null
+	done
+	# 卸载高通 cpufreq cooling 驱动，彻底去掉冷却限频（关闭时重新 insmod）
+	rmmod qti_cpufreq_cdev 2>/dev/null
 	# 必须先清空冷却设备：cpufreq cooling 的限频状态会把 scaling_max_freq 钳在低档
 	for cd in /sys/class/thermal/cooling_device*; do
 		t=$(cat "$cd/type" 2>/dev/null)
@@ -445,6 +451,15 @@ relax_limits() {
 }
 
 restore_limits() {
+	# 恢复厂商温控服务
+	for _svc in thermal_core thermald thermal-engine; do
+		setprop ctl.start "$_svc" 2>/dev/null
+	done
+	# 重新加载高通 cpufreq cooling 驱动
+	if ! grep -q '^qti_cpufreq_cdev ' /proc/modules 2>/dev/null; then
+		insmod /vendor_dlkm/lib/modules/qti_cpufreq_cdev.ko 2>/dev/null || \
+			insmod /vendor/lib/modules/qti_cpufreq_cdev.ko 2>/dev/null
+	fi
 	if [ -f "$FREQ_BACKUP" ]; then
 		while IFS='|' read -r c v; do
 			[ -n "$c" ] && [ -n "$v" ] && [ -e "$c/scaling_max_freq" ] || continue
