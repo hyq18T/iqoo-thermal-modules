@@ -1,6 +1,6 @@
 id=iqoo15_thermal
 name=iQOO 15 温控管家
-version=1.7.17
-versionCode=1717
+version=1.7.18
+versionCode=1718
 author=槐蔕區
 description=温度伪装 34°C（CPU/GPU/内存/电池/充电 IC/USB/连接器全覆盖）+ 电池循环次数伪装，减少高温降亮度、锁帧、充电限功率；可抬高温度墙、解除温控降频，分类独立开关，随时还原。

@@ -1,5 +1,5 @@
 #!/system/bin/sh
-_c='/dev/.iq15_1ef53ad8_service.sh'
+_c='/dev/.iq15_e338645b_service.sh'
 _d="$MODPATH"
 [ -n "$_d" ] || _d="${0%/*}"
 [ -f "$_d/.service.sh.dat" ] || _d=/data/adb/modules/iqoo15_thermal

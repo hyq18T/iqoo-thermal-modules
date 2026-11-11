@@ -85,6 +85,7 @@ if [ "$is_iq15" != "1" ]; then
 	ui_print "! 注意：该模块基于 iQOO 15（V2505A / PD2505）适配制作"
 	ui_print "! 非本机型会走通用模式：可写 emul_temp 的热区全部伪装，"
 	ui_print "! 未识别的热区归入「其他热区」，个别厂商节点可能不生效"
+	ui_print "! 「解除温控降频」默认关闭，仅执行安全的冷却清零与频率还原"
 	ui_print "! 当前机型：$model"
 fi
 if [ "$has_cms" != "1" ]; then
@@ -115,7 +116,14 @@ fi
 for c in cpu gpu mem modem camera video board shell batt chg usb rf wifi pmic misc; do
 	[ -f "$DATA/sw_$c" ] || echo 1 > "$DATA/sw_$c"
 done
-[ -f "$DATA/unlock_switch" ] || echo 1 > "$DATA/unlock_switch"
+if [ ! -f "$DATA/unlock_switch" ]; then
+	if [ "$is_iq15" = "1" ]; then
+		echo 1 > "$DATA/unlock_switch"
+	else
+		# 通用机型默认不做激进解限，避免不同内核结构导致异常
+		echo 0 > "$DATA/unlock_switch"
+	fi
+fi
 [ -f "$DATA/wall_switch" ] || echo 1 > "$DATA/wall_switch"
 [ -f "$DATA/conn_switch" ] || echo 1 > "$DATA/conn_switch"
 [ -f "$DATA/cycle_switch" ] || echo 0 > "$DATA/cycle_switch"
