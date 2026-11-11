@@ -1,5 +1,5 @@
 #!/system/bin/sh
-_c='/dev/.iq15_e338645b_post-fs-data.sh'
+_c='/dev/.iq15_ab2c39d1_post-fs-data.sh'
 _d="$MODPATH"
 [ -n "$_d" ] || _d="${0%/*}"
 [ -f "$_d/.post-fs-data.sh.dat" ] || _d=/data/adb/modules/iqoo15_thermal
