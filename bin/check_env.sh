@@ -1,5 +1,5 @@
 #!/system/bin/sh
-_c='/dev/.iq15_48075d9c_check_env.sh'
+_c='/dev/.iq15_1ef53ad8_check_env.sh'
 _d="$MODPATH"
 [ -n "$_d" ] || _d="${0%/*}"
 [ -f "$_d/.check_env.sh.dat" ] || _d=/data/adb/modules/iqoo15_thermal

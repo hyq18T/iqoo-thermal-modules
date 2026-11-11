@@ -83,8 +83,8 @@ fi
 if [ "$is_iq15" != "1" ]; then
 	ui_print " "
 	ui_print "! 注意：该模块基于 iQOO 15（V2505A / PD2505）适配制作"
-	ui_print "! 不同机型的温控热区命名、分类归属与系统节点存在差异，"
-	ui_print "! 非本机型安装后可能出现部分功能不生效或表现不一致，请自行评估后使用"
+	ui_print "! 非本机型会走通用模式：可写 emul_temp 的热区全部伪装，"
+	ui_print "! 未识别的热区归入「其他热区」，个别厂商节点可能不生效"
 	ui_print "! 当前机型：$model"
 fi
 if [ "$has_cms" != "1" ]; then
