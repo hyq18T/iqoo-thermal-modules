@@ -3,6 +3,14 @@
 适配：iQOO 15 / V2505A / PD2505，Android 16（内核 6.12.58），KernelSU（Magisk 亦可，WebUI 需管理器支持）
 通用：其它 vivo / iQOO 机型走通用模式，只要内核开放可写 `emul_temp` 即可伪装，未识别热区归入「其他热区」；厂商级激进操作（停温控服务 / rmmod / 改 PEM / 风扇）只在已验证的 iQOO 15 上执行，「解除温控降频」在通用机型默认关闭
 
+## v1.7.23 通用模式进一步放开
+
+- 相机 / 视频 / 壳温 / 屏幕 / 射频 / WiFi / 其他：最高 115°C
+- 充电 IC / 电池 / USB / 无线充：最高 110°C
+- 仍按各热区 `critical - 5°C` 下压；原值高于上限时保持不动，不会下调
+- 继续跳过 `hot` / `critical` / `hw-trip` / `bcl` / `ibat` / `vbat` / `socd` / `pmic` / `xo-therm` 等会触发保护的热区/trip
+- iQOO 15 维持原来的 110°C 策略
+
 ## v1.7.22 通用模式抬墙细化
 
 - 性能类热区（CPU / GPU / DDR / 基带）最高 110°C，仍按各热区 `critical - 5°C` 下压
