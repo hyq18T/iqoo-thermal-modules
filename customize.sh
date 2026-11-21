@@ -127,12 +127,8 @@ if [ ! -f "$DATA/unlock_switch" ]; then
 		echo 0 > "$DATA/unlock_switch"
 	fi
 fi
-if [ "$is_iq15" = "1" ]; then
-	[ -f "$DATA/wall_switch" ] || echo 1 > "$DATA/wall_switch"
-else
-	# 通用高通机型默认不抬墙：不同 SoC 的 critical 上限不同，110°C 会越过 critical 触发死机
-	[ -f "$DATA/wall_switch" ] || echo 0 > "$DATA/wall_switch"
-fi
+# 抬墙默认开启：运行时按每个热区 critical 下压，性能热区最高 110°C
+[ -f "$DATA/wall_switch" ] || echo 1 > "$DATA/wall_switch"
 [ -f "$DATA/conn_switch" ] || echo 1 > "$DATA/conn_switch"
 [ -f "$DATA/cycle_switch" ] || echo 0 > "$DATA/cycle_switch"
 [ -f "$DATA/cycle_value" ] || echo 22 > "$DATA/cycle_value"
